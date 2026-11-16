@@ -126,8 +126,8 @@ svg { display: block; }
 .node.open .pin { box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 30%, transparent); }
 .ncard { background: var(--card); border: 3px solid var(--line); border-radius: var(--r); overflow: hidden; }
 .node.open .ncard { border-color: var(--c); }
-.nhead { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 10px 14px; background: none; border: 0; text-align: left; }
-.nt { flex: 1; font-size: 19px; font-weight: 700; line-height: 1.2; }
+.nhead { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 10px 14px; text-align: left; }
+.nt { flex: 1; margin: 0; font-size: 19px; font-weight: 700; line-height: 1.2; }
 .nm { font: 700 13px var(--display); color: var(--muted); white-space: nowrap; }
 .nchev svg { width: 22px; height: 22px; transition: transform .2s; }
 .node.open .nchev svg { transform: rotate(180deg); }

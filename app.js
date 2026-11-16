@@ -116,31 +116,8 @@
     return { done: d, total: tot, days: full };
   }
 
-  /* ------------------------------------------------------------ audio (voce del browser) */
-  var speaking = null;
-  function canSpeak() { return "speechSynthesis" in window; }
-  function setBtn(btn, on_) { if (!btn) return; btn.classList.toggle("on", on_); var sp = btn.querySelector("span"); if (sp) sp.textContent = on_ ? t("stop") : t("listen"); }
-  function stopSpeak() { try { window.speechSynthesis.cancel(); } catch (e) { /* ignora */ } if (speaking) { setBtn(speaking, false); speaking = null; } }
-  function speak(text, btn) {
-    stopSpeak(); speaking = btn; setBtn(btn, true);
-    var end = function () { if (speaking === btn) speaking = null; setBtn(btn, false); };
-    try {
-      var u = new SpeechSynthesisUtterance(text.slice(0, 1900));
-      u.lang = L === "it" ? "it-IT" : "en-GB"; u.onend = end; u.onerror = end;
-      window.speechSynthesis.speak(u);
-    } catch (e) { end(); }
-  }
-  function listenBtn(text) {
-    if (!canSpeak()) return null;
-    var b = h("button", { class: "listen", type: "button", "aria-label": t("listenAria") });
-    b.innerHTML = ICON.speaker + "<span>" + t("listen") + "</span>";
-    on(b, "click", function () { if (b.classList.contains("on")) stopSpeak(); else speak(text, b); });
-    return b;
-  }
-
   /* ------------------------------------------------------------ icone e disegni */
   var ICON = {
-    speaker: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ic" d="M4 9v6h4l5 4V5L8 9z"/><path class="ic-line" d="M16 8c2 2 2 6 0 8M18.5 5.5c4 4 4 9 0 13"/></svg>',
     check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ic-line" d="M5 12.5l5 5 9-11"/></svg>',
     back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ic-line" d="M15 5l-7 7 7 7"/></svg>',
     down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="ic-line" d="M6 9l6 6 6-6"/></svg>',
@@ -177,13 +154,12 @@
   function iconFor(n) { return (n === "random" || n === "parallel") ? fibersSvg(n) : (ICON[n] || ""); }
 
   /* ------------------------------------------------------------ componenti dei moduli */
-  function doneButton(ctx, label) { var b = h("button", { class: "btn", type: "button" }, label || t("gotIt")); on(b, "click", function () { b.disabled = true; ctx.done(); }); return b; }
+  function doneButton(ctx, label) { var b = h("button", { class: "btn", type: "button" }, label || t("gotIt")); on(b, "click", function () { b.disabled = true; ctx.done(true); }); return b; }
 
   function cHook(nd, ctx) {
     var box = h("div", { class: "hook" },
       h("div", { class: "hook-row" }, mascot(), h("div", { class: "bubble" }, h("p", null, nd.text))),
       nd.practice ? h("p", { class: "practice" }, h("b", null, t("practice")), nd.practice) : null);
-    var lb = listenBtn(nd.text + " " + (nd.practice || "")); if (lb) box.append(lb);
     box.append(doneButton(ctx));
     return box;
   }
@@ -204,7 +180,6 @@
       grid.append(b);
     });
     var box = h("div", { class: "cardsbox" });
-    var lb = listenBtn(nd.items.map(function (i) { return i.t + ". " + i.d; }).join(" ")); if (lb) box.append(lb);
     box.append(counter, grid);
     if (nd.note) box.append(h("p", { class: "note" }, nd.note));
     return box;
@@ -607,27 +582,31 @@
     }
 
     var root = h("header", { class: "root" }, mascot("big"), h("div", null, h("h1", null, day.title), h("p", null, day.sub + " · ≈ " + dayMin(week, day) + " " + t("min"))));
-    var trail = h("ol", { class: "trail" }), lis = [], openIdx = -1;
-
-    function setOpen(i, scroll) {
-      lis.forEach(function (x, xi) { var op = xi === i; x.li.classList.toggle("open", op); x.head.setAttribute("aria-expanded", op ? "true" : "false"); x.body.hidden = !op; });
-      openIdx = i;
-      if (i >= 0 && !lis[i].built) {
-        lis[i].built = true; var nd = nodes[i];
-        var ctx = { done: function () {
+    var trail = h("ol", { class: "trail" }), lis = [];
+    function pending() { for (var q = 0; q < total; q++) if (!mem.done[nkey(week, day.n, q)]) return q; return total; }
+    function mark() { var p = pending(); lis.forEach(function (x, xi) { x.li.classList.toggle("open", xi === p); }); }
+    function goNext(i) { if (i < total - 1) reveal(i + 1, true); else scrollToEl(finish.hidden ? extra : finish); }
+    function reveal(i, scroll) {
+      var x = lis[i]; x.li.hidden = false;
+      if (!x.built) {
+        x.built = true;
+        var nd = nodes[i];
+        var ctx = { done: function (advance) {
           if (!mem.done[nkey(week, day.n, i)]) { mem.done[nkey(week, day.n, i)] = true; save(); }
-          lis[i].li.classList.add("done"); lis[i].foot.hidden = false; refresh();
+          x.li.classList.add("done"); x.foot.hidden = !!advance; refresh(); mark();
+          if (advance) goNext(i);
         } };
-        lis[i].content.append(RENDER[nd.type](nd, ctx, week, day));
-        if (mem.done[nkey(week, day.n, i)]) lis[i].foot.hidden = false;
+        x.content.append(RENDER[nd.type](nd, ctx, week, day));
+        if (mem.done[nkey(week, day.n, i)]) x.foot.hidden = false;
       }
-      if (scroll && i >= 0) scrollToEl(lis[i].li);
+      mark();
+      if (scroll) scrollToEl(x.li);
     }
 
     nodes.forEach(function (nd, i) {
-      var li = h("li", { class: "node" + (mem.done[nkey(week, day.n, i)] ? " done" : "") });
+      var li = h("li", { class: "node" + (mem.done[nkey(week, day.n, i)] ? " done" : ""), hidden: true });
       var pin = h("div", { class: "pin", "aria-hidden": "true" }, h("span", { class: "pn" }, String(i + 1)), h("span", { class: "pk", html: ICON.check }));
-      var head = h("button", { class: "nhead", type: "button", "aria-expanded": "false", id: "h" + i, "aria-controls": "b" + i }, h("span", { class: "nt" }, nd.title), h("span", { class: "nm" }, nd.min + " " + t("min")), h("span", { class: "nchev", html: ICON.down }));
+      var head = h("div", { class: "nhead" }, h("h2", { class: "nt" }, nd.title), h("span", { class: "nm" }, nd.min + " " + t("min")));
       var content = h("div", { class: "ncontent" });
       var rate = h("div", { class: "rate" });
       var nk = nkey(week, day.n, i);
@@ -642,11 +621,9 @@
       }
       drawRate();
       var foot = h("div", { class: "nfoot", hidden: true },
-        on(h("button", { class: "btn ghost", type: "button" }, i < total - 1 ? t("nextStop") : t("toExtras")), "click", function () { if (i < total - 1) setOpen(i + 1, true); else { setOpen(-1); scrollToEl(extra); } }), rate);
-      var body = h("div", { class: "nbody", id: "b" + i, role: "region", "aria-labelledby": "h" + i, hidden: true }, content, foot);
-      on(head, "click", function () { stopSpeak(); setOpen(openIdx === i ? -1 : i, openIdx !== i); });
-      li.append(pin, h("div", { class: "ncard" }, head, body)); trail.append(li);
-      lis.push({ li: li, head: head, body: body, content: content, foot: foot, built: false });
+        on(h("button", { class: "btn", type: "button" }, i < total - 1 ? t("nextStop") : t("toExtras")), "click", function () { goNext(i); }), rate);
+      li.append(pin, h("div", { class: "ncard" }, head, h("div", { class: "nbody" }, content, foot))); trail.append(li);
+      lis.push({ li: li, content: content, foot: foot, built: false });
     });
 
     var extra = h("section", { class: "extra" }, h("h2", null, t("extrasH")), h("p", { class: "hint" }, t("extrasHint")));
@@ -659,13 +636,12 @@
     });
     extra.append(list, h("p", { class: "hint small" }, t("extrasNote")));
     app.append(top, root, trail, finish, extra); refresh();
-    var fo = 0; for (var q = 0; q < total; q++) { if (!mem.done[nkey(week, day.n, q)]) { fo = q; break; } }
-    setOpen(fo, false);
+    var upto = Math.min(pending(), total - 1);
+    for (var r = 0; r <= upto; r++) reveal(r, false);
   }
 
   /* ------------------------------------------------------------ router */
   function route() {
-    stopSpeak();
     var hsh = location.hash.slice(1), m;
     if ((m = /^(w\d\d)-d([1-7])$/.exec(hsh))) {
       var w = weekById(m[1]), d = w && w.days[parseInt(m[2], 10) - 1];
